@@ -9,6 +9,8 @@ import tn.esprit.bookservice.entities.Book;
 import tn.esprit.bookservice.services.BookService;
 
 import jakarta.validation.Valid; // If you add validation to Book entity/DTO later
+import tn.esprit.bookservice.services.interfaces.IBookService;
+
 import java.util.List;
 import java.util.Optional;
 
@@ -17,7 +19,7 @@ import java.util.Optional;
 @AllArgsConstructor // Injects BookService via constructor
 public class BookController {
 
-    private final BookService bookService;
+    private final IBookService bookService;
 
     // --- Get All Books (Basic Info) ---
     @GetMapping

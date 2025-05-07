@@ -8,6 +8,7 @@ import tn.esprit.authorservice.dto.AuthorRequestDto;   // Import DTO
 import tn.esprit.authorservice.dto.AuthorResponseDto;  // Import DTO
 import tn.esprit.authorservice.entities.Author; // Keep for internal use if needed, or remove if service handles all
 import tn.esprit.authorservice.services.AuthorService;
+import tn.esprit.authorservice.services.interfaces.IAuthorService;
 
 import java.util.List;
 import java.util.Optional;
@@ -16,7 +17,12 @@ import java.util.Optional;
 @RequestMapping("/api/authors")
 @AllArgsConstructor
 public class AuthController {
-    private final AuthorService authorService;
+    private final IAuthorService authorService;
+
+    @GetMapping("/welcome") // Make sure this is present and correct
+    public ResponseEntity<String> getServiceWelcomeMessage() {
+        return ResponseEntity.ok(authorService.getWelcomeMessage());
+    }
 
     @GetMapping
     public ResponseEntity<List<AuthorResponseDto>> getAllAuthors() {

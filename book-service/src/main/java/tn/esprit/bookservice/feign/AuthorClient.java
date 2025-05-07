@@ -7,7 +7,7 @@ import tn.esprit.bookservice.dto.AuthorResponseDto; // Import the DTO
 
 import java.util.List;
 
-@FeignClient(name = "author-service-client", url = "${author.service.url}", path = "/api/authors")
+@FeignClient(name = "author-service")
 public interface AuthorClient {
 
     /**

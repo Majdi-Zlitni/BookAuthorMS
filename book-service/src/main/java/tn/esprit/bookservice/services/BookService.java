@@ -8,6 +8,7 @@ import tn.esprit.bookservice.dto.BookWithAuthorDto;
 import tn.esprit.bookservice.entities.Book;
 import tn.esprit.bookservice.feign.AuthorClient;
 import tn.esprit.bookservice.repository.BookRepository;
+import tn.esprit.bookservice.services.interfaces.IBookService;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -17,23 +18,26 @@ import java.util.stream.Collectors;
 @Service
 @AllArgsConstructor // Injects dependencies via constructor
 @Slf4j // Lombok annotation for easy logging (provides 'log' variable)
-public class BookService {
+public class BookService implements IBookService {
 
     private final BookRepository bookRepository;
     private final AuthorClient authorClient; // Feign client
 
     // --- Basic CRUD Operations ---
 
+    @Override
     public List<Book> getAllBooks() {
         log.info("Fetching all books");
         return bookRepository.findAll();
     }
 
+    @Override
     public Optional<Book> getBookById(String id) {
         log.info("Fetching book by id: {}", id);
         return bookRepository.findById(id);
     }
 
+    @Override
     public Book createBook(Book book) {
         log.info("Creating new book for authorId: {}", book.getAuthorId());
         // Optional: Add validation here to check if authorId is valid by calling author-service
@@ -47,6 +51,7 @@ public class BookService {
         return bookRepository.save(book);
     }
 
+    @Override
     public Optional<Book> updateBook(String id, Book bookDetails) {
         log.info("Attempting to update book with id: {}", id);
         Optional<Book> bookOptional = bookRepository.findById(id);
@@ -74,6 +79,7 @@ public class BookService {
         }
     }
 
+    @Override
     public boolean deleteBook(String id) {
         log.info("Attempting to delete book with id: {}", id);
         if (bookRepository.existsById(id)) {
@@ -88,6 +94,7 @@ public class BookService {
 
     // --- Operations Combining Book and Author Data ---
 
+    @Override
     public List<BookWithAuthorDto> getBooksWithAuthors() {
         log.info("Fetching all books with their author details.");
         List<Book> books = bookRepository.findAll();
@@ -96,12 +103,14 @@ public class BookService {
                 .collect(Collectors.toList());
     }
 
+    @Override
     public Optional<BookWithAuthorDto> getBookWithAuthorById(String bookId) {
         log.info("Fetching book with author details for bookId: {}", bookId);
         Optional<Book> bookOptional = bookRepository.findById(bookId);
         return bookOptional.map(this::mapToBookWithAuthorDTO); // Use helper method
     }
 
+    @Override
     public List<BookWithAuthorDto> getBooksByAuthorId(String authorId) {
         log.info("Fetching books for authorId: {}", authorId);
         // First, check if author exists (optional but good practice)

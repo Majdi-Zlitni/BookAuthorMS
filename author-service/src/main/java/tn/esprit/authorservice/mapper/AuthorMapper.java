@@ -1,7 +1,5 @@
 package tn.esprit.authorservice.mapper;
 import org.mapstruct.Mapper;
-import org.mapstruct.Mapping;
-import org.mapstruct.factory.Mappers;
 import tn.esprit.authorservice.dto.AuthorRequestDto;
 import tn.esprit.authorservice.dto.AuthorResponseDto;
 import tn.esprit.authorservice.entities.Author;
