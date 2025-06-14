@@ -1,0 +1,102 @@
+version: "3.8"
+
+services:
+  mongodb:
+    image: mongo:latest
+    container_name: mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - microservice-network
+
+  registry-server:
+    build: ./RegistryServer
+    container_name: registry-server
+    ports:
+      - "8761:8761" # Eureka default port
+    environment:
+      - SERVER_PORT=8761
+      # Add any other specific environment variables for registry-server
+    networks:
+      - microservice-network
+
+  config-server:
+    build: ./config-server # Path to config-server Dockerfile context
+    container_name: config-server
+    ports:
+      - "8888:8888" # Config server default port
+    environment:
+      - SERVER_PORT=8888
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://registry-server:8761/eureka
+      # Add other config-server specific properties, e.g., Git URI if using Git backend
+      # - SPRING_CLOUD_CONFIG_SERVER_GIT_URI=https://your-git-repo/config-repo.git
+      # - SPRING_PROFILES_ACTIVE=git # or native, etc.
+    depends_on:
+      - registry-server
+    networks:
+      - microservice-network
+
+  author-service:
+    build: ./author-service
+    container_name: author-service
+    ports:
+      - "8081:8081" # Expose if direct access needed, otherwise gateway handles it
+    environment:
+      - SERVER_PORT=8081 # Internal port for the application
+      - SPRING_CONFIG_IMPORT=optional:configserver:http://config-server:8888
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://registry-server:8761/eureka
+      - SPRING_DATA_MONGODB_URI=mongodb://mongodb:27017/authordb # Connect to mongodb service
+      # Add any other environment variables needed by author-service
+    depends_on:
+      - mongodb
+      - registry-server
+      - config-server
+    networks:
+      - microservice-network
+
+  book-service:
+    build: ./book-service
+    container_name: book-service
+    ports:
+      - "8082:8082" # Expose if direct access needed
+    environment:
+      - SERVER_PORT=8082
+      - SPRING_CONFIG_IMPORT=optional:configserver:http://config-server:8888
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://registry-server:8761/eureka
+      - SPRING_DATA_MONGODB_URI=mongodb://mongodb:27017/bookdb
+      # If Feign client in book-service needs to know author-service URL directly (not recommended, use discovery)
+      # - AUTHOR_SERVICE_URL=http://author-service:8081
+    depends_on:
+      - mongodb
+      - registry-server
+      - config-server
+      - author-service # Ensures author-service starts before book-service
+    networks:
+      - microservice-network
+
+  gateway-service:
+    build: ./Gateway
+    container_name: gateway-service
+    ports:
+      - "8080:8080" # Main entry point for your application
+    environment:
+      - SERVER_PORT=8080
+      - SPRING_CONFIG_IMPORT=optional:configserver:http://config-server:8888
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://registry-server:8761/eureka
+      # Gateway specific configurations (routes) should ideally come from config-server
+    depends_on:
+      - registry-server
+      - config-server
+      - author-service
+      - book-service
+    networks:
+      - microservice-network
+
+volumes:
+  mongo_data: # Persists MongoDB data
+
+networks:
+  microservice-network:
+    driver: bridge
