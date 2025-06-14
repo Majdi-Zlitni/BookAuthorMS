@@ -9,9 +9,14 @@ import java.util.List;
 @Mapper(componentModel = "spring")
 public interface AuthorMapper {
     // Maps Author entity to AuthorResponseDto
-    AuthorResponseDto entityToResponseDto(Author author);
 
-    Author requestDtoToEntity(AuthorRequestDto authorRequestDto);
 
+    Author authorRequestDtoToAuthor(AuthorRequestDto authorRequestDto);
+
+    // This is the method you want to keep for single entity to DTO mapping
+    AuthorResponseDto authorToAuthorResponseDto(Author author);
+
+    // This list mapping method will now unambiguously use authorToAuthorResponseDto
+    // for its elements.
     List<AuthorResponseDto> listEntityToResponseDto(List<Author> authors);
 }

@@ -11,30 +11,62 @@ services:
     networks:
       - microservice-network
 
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: rabbitmq
+    ports:
+      - "5672:5672" # RabbitMQ AMQP port
+      - "15672:15672" # RabbitMQ Management UI port
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq/
+    networks:
+      - microservice-network
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:latest # Consider pinning a specific version for stability
+    container_name: keycloak
+    ports:
+      - "8180:8080" # Keycloak's internal port 8080 mapped to host 8180
+    environment:
+      - KEYCLOAK_ADMIN=admin
+      - KEYCLOAK_ADMIN_PASSWORD=admin
+      # For development, Keycloak uses an embedded H2. For production, configure an external DB.
+    command: start-dev # Use 'start' for production and configure an external DB
+    # volumes: # Optional: if you want to persist Keycloak's H2 data or config
+    #   - keycloak_data:/opt/keycloak/data
+    networks:
+      - microservice-network
+
   registry-server:
-    build: ./RegistryServer
+    build: ./RegistryServer # Assuming this is the correct path
     container_name: registry-server
     ports:
-      - "8761:8761" # Eureka default port
+      - "8761:8761"
     environment:
       - SERVER_PORT=8761
-      # Add any other specific environment variables for registry-server
+    depends_on: # Good practice to ensure Keycloak/RabbitMQ are at least starting up
+      - keycloak
+      - rabbitmq
     networks:
       - microservice-network
 
   config-server:
-    build: ./config-server # Path to config-server Dockerfile context
+    build: ./config-server
     container_name: config-server
     ports:
-      - "8888:8888" # Config server default port
+      - "8888:8888"
     environment:
       - SERVER_PORT=8888
       - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://registry-server:8761/eureka
-      # Add other config-server specific properties, e.g., Git URI if using Git backend
       # - SPRING_CLOUD_CONFIG_SERVER_GIT_URI=https://your-git-repo/config-repo.git
-      # - SPRING_PROFILES_ACTIVE=git # or native, etc.
+      # - SPRING_PROFILES_ACTIVE=git
     depends_on:
       - registry-server
+      - keycloak # Config server might not directly use it, but good for startup order
+      - rabbitmq
     networks:
       - microservice-network
 
@@ -42,17 +74,25 @@ services:
     build: ./author-service
     container_name: author-service
     ports:
-      - "8081:8081" # Expose if direct access needed, otherwise gateway handles it
+      - "8081:8081"
     environment:
-      - SERVER_PORT=8081 # Internal port for the application
+      - SERVER_PORT=8081
       - SPRING_CONFIG_IMPORT=optional:configserver:http://config-server:8888
       - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://registry-server:8761/eureka
-      - SPRING_DATA_MONGODB_URI=mongodb://mongodb:27017/authordb # Connect to mongodb service
-      # Add any other environment variables needed by author-service
+      - SPRING_DATA_MONGODB_URI=mongodb://mongodb:27017/authordb
+      # RabbitMQ Configuration
+      - SPRING_RABBITMQ_HOST=rabbitmq
+      - SPRING_RABBITMQ_PORT=5672
+      - SPRING_RABBITMQ_USERNAME=guest
+      - SPRING_RABBITMQ_PASSWORD=guest
+      # Keycloak Configuration (replace 'your-realm-name' after creating it in Keycloak)
+      - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://keycloak:8080/realms/your-realm-name
     depends_on:
       - mongodb
       - registry-server
       - config-server
+      - rabbitmq
+      - keycloak
     networks:
       - microservice-network
 
@@ -60,42 +100,55 @@ services:
     build: ./book-service
     container_name: book-service
     ports:
-      - "8082:8082" # Expose if direct access needed
+      - "8082:8082"
     environment:
       - SERVER_PORT=8082
       - SPRING_CONFIG_IMPORT=optional:configserver:http://config-server:8888
       - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://registry-server:8761/eureka
       - SPRING_DATA_MONGODB_URI=mongodb://mongodb:27017/bookdb
-      # If Feign client in book-service needs to know author-service URL directly (not recommended, use discovery)
-      # - AUTHOR_SERVICE_URL=http://author-service:8081
+      # RabbitMQ Configuration
+      - SPRING_RABBITMQ_HOST=rabbitmq
+      - SPRING_RABBITMQ_PORT=5672
+      - SPRING_RABBITMQ_USERNAME=guest
+      - SPRING_RABBITMQ_PASSWORD=guest
+      # Keycloak Configuration (replace 'your-realm-name' after creating it in Keycloak)
+      - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://keycloak:8080/realms/your-realm-name
+      # - AUTHOR_SERVICE_URL=http://author-service:8081 # If using direct Feign URL (not recommended with discovery)
     depends_on:
       - mongodb
       - registry-server
       - config-server
-      - author-service # Ensures author-service starts before book-service
+      - author-service
+      - rabbitmq
+      - keycloak
     networks:
       - microservice-network
 
   gateway-service:
-    build: ./Gateway
+    build: ./Gateway # Assuming this is the correct path
     container_name: gateway-service
     ports:
-      - "8080:8080" # Main entry point for your application
+      - "8080:8080"
     environment:
       - SERVER_PORT=8080
       - SPRING_CONFIG_IMPORT=optional:configserver:http://config-server:8888
       - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://registry-server:8761/eureka
-      # Gateway specific configurations (routes) should ideally come from config-server
+      # Keycloak Configuration (replace 'your-realm-name' after creating it in Keycloak)
+      - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://keycloak:8080/realms/your-realm-name
     depends_on:
       - registry-server
       - config-server
       - author-service
       - book-service
+      - keycloak
+      - rabbitmq # Gateway might not directly use RabbitMQ, but good for startup order
     networks:
       - microservice-network
 
 volumes:
-  mongo_data: # Persists MongoDB data
+  mongo_data:
+  rabbitmq_data: # Persists RabbitMQ data
+  # keycloak_data: # Uncomment if you want to persist Keycloak's embedded H2 data
 
 networks:
   microservice-network:

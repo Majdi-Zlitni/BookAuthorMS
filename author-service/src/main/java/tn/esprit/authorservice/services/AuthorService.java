@@ -2,9 +2,12 @@ package tn.esprit.authorservice.services;
 
 import lombok.RequiredArgsConstructor; // Changed from @AllArgsConstructor
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.context.config.annotation.RefreshScope;
 import org.springframework.stereotype.Service;
+import tn.esprit.authorservice.config.RabbitMQConfig;
+import tn.esprit.authorservice.dto.AuthorCreatedEvent;
 import tn.esprit.authorservice.dto.AuthorRequestDto;
 import tn.esprit.authorservice.dto.AuthorResponseDto;
 import tn.esprit.authorservice.entities.Author;
@@ -23,6 +26,7 @@ public class AuthorService implements IAuthorService {
 
     private final AuthorRepository authorRepository;
     private final AuthorMapper authorMapper;
+    private final RabbitTemplate rabbitTemplate;
 
     @Value("${welcome.message:Default Welcome}")
     private String welcomeMessage;
@@ -44,15 +48,19 @@ public class AuthorService implements IAuthorService {
     public Optional<AuthorResponseDto> getAuthorById(String id) {
         log.info("Fetching author by id: {}. Message: {}", id, welcomeMessage);
         Optional<Author> authorOptional = authorRepository.findById(id);
-        return authorOptional.map(authorMapper::entityToResponseDto);
+        return authorOptional.map(authorMapper::authorToAuthorResponseDto);
     }
 
     @Override
     public AuthorResponseDto createAuthor(AuthorRequestDto authorRequestDto) {
-        log.info("Creating author. Message: {}", welcomeMessage);
-        Author author = authorMapper.requestDtoToEntity(authorRequestDto);
+        Author author = authorMapper.authorRequestDtoToAuthor(authorRequestDto);
         Author savedAuthor = authorRepository.save(author);
-        return authorMapper.entityToResponseDto(savedAuthor);
+
+        AuthorCreatedEvent event = new AuthorCreatedEvent(savedAuthor.getId(), savedAuthor.getName());
+        log.info("Sending AuthorCreatedEvent: {}", event);
+        rabbitTemplate.convertAndSend(RabbitMQConfig.EXCHANGE_NAME, RabbitMQConfig.AUTHOR_CREATED_ROUTING_KEY, event);
+
+        return authorMapper.authorToAuthorResponseDto(savedAuthor);
     }
 
     @Override
@@ -66,7 +74,7 @@ public class AuthorService implements IAuthorService {
             existingAuthor.setBio(authorRequestDto.getBio());
 
             Author updatedAuthor = authorRepository.save(existingAuthor);
-            return Optional.of(authorMapper.entityToResponseDto(updatedAuthor));
+            return Optional.of(authorMapper.authorToAuthorResponseDto(updatedAuthor));
         } else {
             log.warn("Author with id {} not found for update.", id);
             return Optional.empty();

@@ -1,5 +1,6 @@
 package tn.esprit.bookservice.services;
 
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j; // Import Slf4j for logging
 import org.springframework.stereotype.Service;
@@ -133,6 +134,7 @@ public class BookService implements IBookService {
      * Fetches Author details from author-service using Feign client.
      * Includes basic error handling.
      */
+   /*
     private AuthorResponseDto fetchAuthorDetails(String authorId) {
         try {
             log.debug("Fetching author details for authorId: {}", authorId);
@@ -146,14 +148,17 @@ public class BookService implements IBookService {
             return null; // Indicate that author details couldn't be fetched
         }
     }
+    */
 
     /**
      * Maps a Book entity to a BookWithAuthorDTO by fetching author details.
      */
+   /*
     private BookWithAuthorDto mapToBookWithAuthorDTO(Book book) {
         AuthorResponseDto author = fetchAuthorDetails(book.getAuthorId());
         return createBookWithAuthorDTO(book, author);
     }
+    */
 
     /**
      * Creates a BookWithAuthorDTO from a Book and an AuthorResponseDto.
@@ -172,5 +177,42 @@ public class BookService implements IBookService {
                 book.getDescription(),
                 book.getId() // Include book ID
         );
+    }
+
+    /**
+     * Fetches Author details from author-service using Feign client.
+     * Protected by a Circuit Breaker.
+     */
+    @CircuitBreaker(name = "authorServiceCB", fallbackMethod = "getAuthorDetailsFallback")
+    // @TimeLimiter(name = "authorServiceCB") // Apply TimeLimiter if configured
+    private AuthorResponseDto fetchAuthorDetails(String authorId) {
+        // This method might need to return CompletableFuture if TimeLimiter is used directly on it
+        // For simplicity with Feign, often timeout is configured on Feign client itself or via Resilience4j properties
+        log.debug("Fetching author details for authorId: {}", authorId);
+        AuthorResponseDto author = authorClient.getAuthorById(authorId);
+        log.debug("Successfully fetched author details for authorId: {}", authorId);
+        return author;
+    }
+
+    /**
+     * Fallback method for fetchAuthorDetails.
+     * Must have the same signature as the original method, plus a Throwable parameter.
+     */
+    private AuthorResponseDto getAuthorDetailsFallback(String authorId, Throwable t) {
+        log.warn("Fallback for fetching author details for authorId {}: {}", authorId, t.getMessage());
+        // Return a default/cached AuthorResponseDto or null
+        AuthorResponseDto defaultAuthor = new AuthorResponseDto();
+        defaultAuthor.setId(authorId);
+        defaultAuthor.setName("Unknown Author (Service Unavailable)");
+        defaultAuthor.setEmail("N/A");
+        defaultAuthor.setBio("Author details are currently unavailable.");
+        return defaultAuthor;
+    }
+
+    // mapToBookWithAuthorDTO and createBookWithAuthorDTO will use the fetchAuthorDetails method
+    // which is now protected by the circuit breaker.
+    private BookWithAuthorDto mapToBookWithAuthorDTO(Book book) {
+        AuthorResponseDto author = fetchAuthorDetails(book.getAuthorId()); // This call is now protected
+        return createBookWithAuthorDTO(book, author);
     }
 }
